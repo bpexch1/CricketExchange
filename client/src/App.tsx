@@ -1,6 +1,6 @@
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -11,8 +11,26 @@ import LiveMatchesPage from "@/components/LiveMatchesPage";
 import WalletPage from "@/components/WalletPage";
 import ReportsPage from "@/components/ReportsPage";
 import BettingSlip from "@/components/BettingSlip";
+import { Button } from "@/components/ui/button";
+import { apiRequest } from "@/lib/queryClient";
+import { useMutation } from "@tanstack/react-query";
+import { getQueryFn } from "@/lib/queryClient";
+import type { User } from "@shared/schema";
 
-function AuthenticatedLayout() {
+function AuthenticatedLayout({ user }: { user: User }) {
+  const [, setLocation] = useLocation();
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/logout");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      queryClient.clear();
+      setLocation("/");
+    },
+  });
+
   const style = {
     "--sidebar-width": "16rem",
   };
@@ -33,6 +51,18 @@ function AuthenticatedLayout() {
                 <span className="text-muted-foreground">Balance: </span>
                 <span className="font-mono font-bold">₹98,750</span>
               </div>
+              <span className="text-sm text-muted-foreground" data-testid="text-username">
+                {user.username}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="button-logout"
+                onClick={() => logoutMutation.mutate()}
+                disabled={logoutMutation.isPending}
+              >
+                {logoutMutation.isPending ? "Logging out..." : "Logout"}
+              </Button>
             </div>
           </header>
           <main className="flex-1 overflow-auto">
@@ -54,18 +84,32 @@ function AuthenticatedLayout() {
   );
 }
 
-function App() {
-  const [location] = useLocation();
-  const isLoginPage = location === "/";
+function AppContent() {
+  const { data: user, isLoading } = useQuery<User | null>({
+    queryKey: ["/api/user"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  return <AuthenticatedLayout user={user} />;
+}
+
+function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        {isLoginPage ? (
-          <LoginPage />
-        ) : (
-          <AuthenticatedLayout />
-        )}
+        <AppContent />
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

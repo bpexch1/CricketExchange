@@ -1,22 +1,77 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { useMutation } from "@tanstack/react-query";
 
 export default function LoginPage() {
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const [loginData, setLoginData] = useState({ username: "", password: "" });
   const [registerData, setRegisterData] = useState({ username: "", password: "", confirmPassword: "" });
 
+  const loginMutation = useMutation({
+    mutationFn: async (data: { username: string; password: string }) => {
+      const res = await apiRequest("POST", "/api/login", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      setLocation("/dashboard");
+    },
+    onError: (err: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Login failed",
+        description: err.message.replace(/^\d+: /, ""),
+      });
+    },
+  });
+
+  const registerMutation = useMutation({
+    mutationFn: async (data: { username: string; password: string }) => {
+      const res = await apiRequest("POST", "/api/register", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      setLocation("/dashboard");
+    },
+    onError: (err: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Registration failed",
+        description: err.message.replace(/^\d+: /, ""),
+      });
+    },
+  });
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Login attempted:", loginData);
+    if (!loginData.username || !loginData.password) {
+      toast({ variant: "destructive", title: "Please fill in all fields" });
+      return;
+    }
+    loginMutation.mutate(loginData);
   };
 
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Register attempted:", registerData);
+    if (!registerData.username || !registerData.password || !registerData.confirmPassword) {
+      toast({ variant: "destructive", title: "Please fill in all fields" });
+      return;
+    }
+    if (registerData.password !== registerData.confirmPassword) {
+      toast({ variant: "destructive", title: "Passwords do not match" });
+      return;
+    }
+    registerMutation.mutate({ username: registerData.username, password: registerData.password });
   };
 
   return (
@@ -62,8 +117,13 @@ export default function LoginPage() {
                     onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
                   />
                 </div>
-                <Button type="submit" className="w-full" data-testid="button-login">
-                  Login
+                <Button
+                  type="submit"
+                  className="w-full"
+                  data-testid="button-login"
+                  disabled={loginMutation.isPending}
+                >
+                  {loginMutation.isPending ? "Logging in..." : "Login"}
                 </Button>
               </form>
             </TabsContent>
@@ -102,8 +162,13 @@ export default function LoginPage() {
                     onChange={(e) => setRegisterData({ ...registerData, confirmPassword: e.target.value })}
                   />
                 </div>
-                <Button type="submit" className="w-full" data-testid="button-register">
-                  Create Account
+                <Button
+                  type="submit"
+                  className="w-full"
+                  data-testid="button-register"
+                  disabled={registerMutation.isPending}
+                >
+                  {registerMutation.isPending ? "Creating account..." : "Create Account"}
                 </Button>
               </form>
             </TabsContent>
