@@ -49,7 +49,7 @@ function AuthenticatedLayout({ user }: { user: User }) {
               </div>
               <div className="text-sm">
                 <span className="text-muted-foreground">Balance: </span>
-                <span className="font-mono font-bold">₹98,750</span>
+                <span className="font-mono font-bold" data-testid="text-balance-header">₹{user.balance.toLocaleString("en-IN")}</span>
               </div>
               <span className="text-sm text-muted-foreground" data-testid="text-username">
                 {user.username}

@@ -13,10 +13,73 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { getQueryFn } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { User } from "@shared/schema";
 
 export default function WalletPage() {
   const [depositAmount, setDepositAmount] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [depositOpen, setDepositOpen] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const { toast } = useToast();
+
+  const { data: user } = useQuery<User | null>({
+    queryKey: ["/api/user"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
+
+  const depositMutation = useMutation({
+    mutationFn: async (amount: number) => {
+      const res = await apiRequest("POST", "/api/wallet/deposit", { amount });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      setDepositAmount("");
+      setDepositOpen(false);
+      toast({ title: "Deposit successful", description: "Funds have been added to your wallet." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Deposit failed", description: err.message || "Something went wrong.", variant: "destructive" });
+    },
+  });
+
+  const withdrawMutation = useMutation({
+    mutationFn: async (amount: number) => {
+      const res = await apiRequest("POST", "/api/wallet/withdraw", { amount });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      setWithdrawAmount("");
+      setWithdrawOpen(false);
+      toast({ title: "Withdrawal successful", description: "Funds have been withdrawn from your wallet." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Withdrawal failed", description: err.message || "Something went wrong.", variant: "destructive" });
+    },
+  });
+
+  const handleDeposit = () => {
+    const amount = parseInt(depositAmount, 10);
+    if (!amount || amount <= 0) {
+      toast({ title: "Invalid amount", description: "Please enter a positive amount.", variant: "destructive" });
+      return;
+    }
+    depositMutation.mutate(amount);
+  };
+
+  const handleWithdraw = () => {
+    const amount = parseInt(withdrawAmount, 10);
+    if (!amount || amount <= 0) {
+      toast({ title: "Invalid amount", description: "Please enter a positive amount.", variant: "destructive" });
+      return;
+    }
+    withdrawMutation.mutate(amount);
+  };
 
   const mockTransactions = [
     { id: "1", date: "2024-10-13 14:30", type: "deposit" as const, description: "Account Deposit", amount: 10000, balance: 110000 },
@@ -42,7 +105,9 @@ export default function WalletPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-4xl font-bold font-mono" data-testid="text-balance">₹98,750</p>
+            <p className="text-4xl font-bold font-mono" data-testid="text-balance">
+              ₹{(user?.balance ?? 0).toLocaleString("en-IN")}
+            </p>
             <p className="text-sm text-muted-foreground mt-2">Virtual demo balance</p>
           </CardContent>
         </Card>
@@ -52,7 +117,7 @@ export default function WalletPage() {
             <CardTitle>Quick Actions</CardTitle>
           </CardHeader>
           <CardContent className="flex gap-4">
-            <Dialog>
+            <Dialog open={depositOpen} onOpenChange={setDepositOpen}>
               <DialogTrigger asChild>
                 <Button className="flex-1 gap-2" data-testid="button-deposit">
                   <ArrowDownToLine className="h-4 w-4" />
@@ -76,14 +141,19 @@ export default function WalletPage() {
                       data-testid="input-deposit-amount"
                     />
                   </div>
-                  <Button className="w-full" onClick={() => console.log("Deposit:", depositAmount)} data-testid="button-confirm-deposit">
-                    Confirm Deposit
+                  <Button
+                    className="w-full"
+                    onClick={handleDeposit}
+                    disabled={depositMutation.isPending}
+                    data-testid="button-confirm-deposit"
+                  >
+                    {depositMutation.isPending ? "Processing..." : "Confirm Deposit"}
                   </Button>
                 </div>
               </DialogContent>
             </Dialog>
 
-            <Dialog>
+            <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" className="flex-1 gap-2" data-testid="button-withdraw">
                   <ArrowUpFromLine className="h-4 w-4" />
@@ -107,8 +177,13 @@ export default function WalletPage() {
                       data-testid="input-withdraw-amount"
                     />
                   </div>
-                  <Button className="w-full" onClick={() => console.log("Withdraw:", withdrawAmount)} data-testid="button-confirm-withdraw">
-                    Confirm Withdrawal
+                  <Button
+                    className="w-full"
+                    onClick={handleWithdraw}
+                    disabled={withdrawMutation.isPending}
+                    data-testid="button-confirm-withdraw"
+                  >
+                    {withdrawMutation.isPending ? "Processing..." : "Confirm Withdrawal"}
                   </Button>
                 </div>
               </DialogContent>

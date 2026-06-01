@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import bcrypt from "bcrypt";
+import { z } from "zod";
 import { storage } from "./storage";
 import { insertUserSchema } from "@shared/schema";
 
@@ -9,6 +10,10 @@ declare module "express-session" {
     userId: string;
   }
 }
+
+const amountSchema = z.object({
+  amount: z.number().int().positive(),
+});
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/register", async (req: Request, res: Response) => {
@@ -28,7 +33,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const user = await storage.createUser({ username, password: hashedPassword });
 
     req.session.userId = user.id;
-    return res.status(201).json({ id: user.id, username: user.username });
+    return res.status(201).json({ id: user.id, username: user.username, balance: user.balance });
   });
 
   app.post("/api/login", async (req: Request, res: Response) => {
@@ -50,7 +55,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     req.session.userId = user.id;
-    return res.json({ id: user.id, username: user.username });
+    return res.json({ id: user.id, username: user.username, balance: user.balance });
   });
 
   app.post("/api/logout", (req: Request, res: Response) => {
@@ -73,7 +78,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(401).json({ message: "User not found" });
     }
 
-    return res.json({ id: user.id, username: user.username });
+    return res.json({ id: user.id, username: user.username, balance: user.balance });
+  });
+
+  app.post("/api/wallet/deposit", async (req: Request, res: Response) => {
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const parsed = amountSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid amount" });
+    }
+
+    const user = await storage.getUser(req.session.userId);
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+
+    const updated = await storage.updateUserBalance(user.id, user.balance + parsed.data.amount);
+    return res.json({ balance: updated!.balance });
+  });
+
+  app.post("/api/wallet/withdraw", async (req: Request, res: Response) => {
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const parsed = amountSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid amount" });
+    }
+
+    const user = await storage.getUser(req.session.userId);
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+
+    if (parsed.data.amount > user.balance) {
+      return res.status(400).json({ message: "Insufficient balance" });
+    }
+
+    const updated = await storage.updateUserBalance(user.id, user.balance - parsed.data.amount);
+    return res.json({ balance: updated!.balance });
   });
 
   const httpServer = createServer(app);
