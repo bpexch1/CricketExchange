@@ -17,7 +17,19 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { getQueryFn } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { User } from "@shared/schema";
+import type { User, Transaction } from "@shared/schema";
+
+function formatDate(date: string | Date): string {
+  const d = new Date(date);
+  return d.toLocaleString("en-IN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
 
 export default function WalletPage() {
   const [depositAmount, setDepositAmount] = useState("");
@@ -31,6 +43,19 @@ export default function WalletPage() {
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
+  const { data: rawTransactions = [], isLoading: txnsLoading } = useQuery<Transaction[]>({
+    queryKey: ["/api/wallet/transactions"],
+  });
+
+  const transactions = rawTransactions.map((tx) => ({
+    id: tx.id,
+    date: formatDate(tx.createdAt),
+    type: tx.type as "deposit" | "withdrawal",
+    description: tx.type === "deposit" ? "Account Deposit" : "Bank Transfer",
+    amount: tx.type === "deposit" ? tx.amount : -tx.amount,
+    balance: tx.balanceAfter,
+  }));
+
   const depositMutation = useMutation({
     mutationFn: async (amount: number) => {
       const res = await apiRequest("POST", "/api/wallet/deposit", { amount });
@@ -38,6 +63,7 @@ export default function WalletPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/transactions"] });
       setDepositAmount("");
       setDepositOpen(false);
       toast({ title: "Deposit successful", description: "Funds have been added to your wallet." });
@@ -54,6 +80,7 @@ export default function WalletPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/transactions"] });
       setWithdrawAmount("");
       setWithdrawOpen(false);
       toast({ title: "Withdrawal successful", description: "Funds have been withdrawn from your wallet." });
@@ -80,14 +107,6 @@ export default function WalletPage() {
     }
     withdrawMutation.mutate(amount);
   };
-
-  const mockTransactions = [
-    { id: "1", date: "2024-10-13 14:30", type: "deposit" as const, description: "Account Deposit", amount: 10000, balance: 110000 },
-    { id: "2", date: "2024-10-13 15:45", type: "bet_win" as const, description: "India vs Australia - Win", amount: 5500, balance: 115500 },
-    { id: "3", date: "2024-10-13 16:20", type: "bet_loss" as const, description: "England vs Pakistan - Loss", amount: -2000, balance: 113500 },
-    { id: "4", date: "2024-10-13 17:10", type: "withdrawal" as const, description: "Bank Transfer", amount: -5000, balance: 108500 },
-    { id: "5", date: "2024-10-12 19:30", type: "bet_win" as const, description: "South Africa vs NZ - Win", amount: 3200, balance: 111700 },
-  ];
 
   return (
     <div className="space-y-6">
@@ -197,7 +216,7 @@ export default function WalletPage() {
           <CardTitle>Transaction History</CardTitle>
         </CardHeader>
         <CardContent>
-          <TransactionTable transactions={mockTransactions} />
+          <TransactionTable transactions={transactions} isLoading={txnsLoading} />
         </CardContent>
       </Card>
     </div>

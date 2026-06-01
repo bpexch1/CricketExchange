@@ -7,6 +7,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface Transaction {
   id: string;
@@ -19,9 +20,10 @@ interface Transaction {
 
 interface TransactionTableProps {
   transactions: Transaction[];
+  isLoading?: boolean;
 }
 
-export default function TransactionTable({ transactions }: TransactionTableProps) {
+export default function TransactionTable({ transactions, isLoading }: TransactionTableProps) {
   const getTypeColor = (type: Transaction["type"]) => {
     switch (type) {
       case "deposit":
@@ -57,21 +59,39 @@ export default function TransactionTable({ transactions }: TransactionTableProps
           </TableRow>
         </TableHeader>
         <TableBody>
-          {transactions.map((txn) => (
-            <TableRow key={txn.id} data-testid={`row-transaction-${txn.id}`}>
-              <TableCell className="font-mono text-sm">{txn.date}</TableCell>
-              <TableCell>
-                <Badge variant="outline" className={getTypeColor(txn.type)}>
-                  {getTypeLabel(txn.type)}
-                </Badge>
+          {isLoading ? (
+            Array.from({ length: 3 }).map((_, i) => (
+              <TableRow key={i}>
+                <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+                <TableCell><Skeleton className="h-4 w-36" /></TableCell>
+                <TableCell className="text-right"><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                <TableCell className="text-right"><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+              </TableRow>
+            ))
+          ) : transactions.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={5} className="text-center text-muted-foreground py-8" data-testid="text-no-transactions">
+                No transactions yet
               </TableCell>
-              <TableCell className="text-sm">{txn.description}</TableCell>
-              <TableCell className={`text-right font-mono font-semibold ${txn.amount >= 0 ? 'text-profit' : 'text-loss'}`}>
-                {txn.amount >= 0 ? '+' : ''}₹{txn.amount.toLocaleString()}
-              </TableCell>
-              <TableCell className="text-right font-mono">₹{txn.balance.toLocaleString()}</TableCell>
             </TableRow>
-          ))}
+          ) : (
+            transactions.map((txn) => (
+              <TableRow key={txn.id} data-testid={`row-transaction-${txn.id}`}>
+                <TableCell className="font-mono text-sm">{txn.date}</TableCell>
+                <TableCell>
+                  <Badge variant="outline" className={getTypeColor(txn.type)}>
+                    {getTypeLabel(txn.type)}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-sm">{txn.description}</TableCell>
+                <TableCell className={`text-right font-mono font-semibold ${txn.amount >= 0 ? 'text-profit' : 'text-loss'}`}>
+                  {txn.amount >= 0 ? '+' : ''}₹{Math.abs(txn.amount).toLocaleString()}
+                </TableCell>
+                <TableCell className="text-right font-mono">₹{txn.balance.toLocaleString()}</TableCell>
+              </TableRow>
+            ))
+          )}
         </TableBody>
       </Table>
     </div>

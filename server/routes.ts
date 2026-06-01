@@ -96,7 +96,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(401).json({ message: "User not found" });
     }
 
-    const updated = await storage.updateUserBalance(user.id, user.balance + parsed.data.amount);
+    const newBalance = user.balance + parsed.data.amount;
+    const updated = await storage.updateUserBalance(user.id, newBalance);
+    await storage.createTransaction({
+      userId: user.id,
+      type: "deposit",
+      amount: parsed.data.amount,
+      balanceAfter: newBalance,
+    });
+
     return res.json({ balance: updated!.balance });
   });
 
@@ -119,8 +127,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).json({ message: "Insufficient balance" });
     }
 
-    const updated = await storage.updateUserBalance(user.id, user.balance - parsed.data.amount);
+    const newBalance = user.balance - parsed.data.amount;
+    const updated = await storage.updateUserBalance(user.id, newBalance);
+    await storage.createTransaction({
+      userId: user.id,
+      type: "withdrawal",
+      amount: parsed.data.amount,
+      balanceAfter: newBalance,
+    });
+
     return res.json({ balance: updated!.balance });
+  });
+
+  app.get("/api/wallet/transactions", async (req: Request, res: Response) => {
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const txns = await storage.getTransactionsByUser(req.session.userId);
+    return res.json(txns);
   });
 
   const httpServer = createServer(app);
