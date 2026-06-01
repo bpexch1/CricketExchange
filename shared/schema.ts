@@ -21,7 +21,7 @@ export type User = typeof users.$inferSelect;
 export const transactions = pgTable("transactions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
-  type: text("type", { enum: ["deposit", "withdrawal"] }).notNull(),
+  type: text("type", { enum: ["deposit", "withdrawal", "bet"] }).notNull(),
   amount: integer("amount").notNull(),
   balanceAfter: integer("balance_after").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),

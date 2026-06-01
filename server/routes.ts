@@ -148,6 +148,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return res.json(txns);
   });
 
+  app.post("/api/bets", async (req: Request, res: Response) => {
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const parsed = amountSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid stake amount" });
+    }
+
+    const user = await storage.getUser(req.session.userId);
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+
+    if (parsed.data.amount > user.balance) {
+      return res.status(400).json({ message: "Insufficient balance" });
+    }
+
+    const newBalance = user.balance - parsed.data.amount;
+    const updated = await storage.updateUserBalance(user.id, newBalance);
+    await storage.createTransaction({
+      userId: user.id,
+      type: "bet",
+      amount: parsed.data.amount,
+      balanceAfter: newBalance,
+    });
+
+    return res.json({ balance: updated!.balance });
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

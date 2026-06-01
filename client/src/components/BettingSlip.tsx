@@ -1,9 +1,12 @@
 import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { X } from "lucide-react";
+import { queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface BetItem {
   id: string;
@@ -18,13 +21,62 @@ export default function BettingSlip() {
     { id: "1", match: "India vs Australia", selection: "India to Win", type: "back", odds: 1.85 }
   ]);
   const [stakes, setStakes] = useState<Record<string, string>>({ "1": "1000" });
+  const { toast } = useToast();
 
   const removeBet = (id: string) => {
     setBets(bets.filter(b => b.id !== id));
     const newStakes = { ...stakes };
     delete newStakes[id];
     setStakes(newStakes);
-    console.log(`Removed bet ${id}`);
+  };
+
+  const totalStake = bets.reduce((sum, bet) => {
+    return sum + (parseInt(stakes[bet.id] || "0", 10) || 0);
+  }, 0);
+
+  const placeBetMutation = useMutation({
+    mutationFn: async (stake: number) => {
+      const res = await fetch("/api/bets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ amount: stake }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "Could not place bet");
+      }
+      return data;
+    },
+    onSuccess: (_data, stake) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/transactions"] });
+      setBets([]);
+      setStakes({});
+      toast({
+        title: "Bet placed",
+        description: `₹${stake.toLocaleString("en-IN")} deducted from your balance.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Bet failed",
+        description: error.message || "Could not place bet.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handlePlaceBets = () => {
+    if (totalStake <= 0) {
+      toast({
+        title: "Invalid stake",
+        description: "Please enter a valid stake amount.",
+        variant: "destructive",
+      });
+      return;
+    }
+    placeBetMutation.mutate(totalStake);
   };
 
   const quickStakes = [100, 500, 1000, 5000, 10000];
@@ -96,9 +148,23 @@ export default function BettingSlip() {
           ))
         )}
         {bets.length > 0 && (
-          <Button className="w-full" data-testid="button-place-bet">
-            Place Bet{bets.length > 1 ? 's' : ''}
-          </Button>
+          <div className="space-y-2">
+            {placeBetMutation.isError && (
+              <p className="text-sm text-destructive text-center" data-testid="text-bet-error">
+                {placeBetMutation.error?.message || "Could not place bet"}
+              </p>
+            )}
+            <Button
+              className="w-full"
+              data-testid="button-place-bet"
+              onClick={handlePlaceBets}
+              disabled={placeBetMutation.isPending || totalStake <= 0}
+            >
+              {placeBetMutation.isPending
+                ? "Placing..."
+                : `Place Bet${bets.length > 1 ? "s" : ""} · ₹${totalStake.toLocaleString("en-IN")}`}
+            </Button>
+          </div>
         )}
       </CardContent>
     </Card>
